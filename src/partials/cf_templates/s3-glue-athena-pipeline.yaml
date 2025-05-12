@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: s3-Athena ETL Pipeline stack
+
+
+# Parameters:
+
+
+Mappings:
+  EnvConfig:
+    dev:
+      S3BucketName: "etl-pipeline-input-data-bucket"
+      PartialDataBucketName: "project-partials-1745563858254"
+      DefaultRegion: "ap-south-1"
+      GlueJobConfigurationTableName: "glue-job-configurations"
+      GlueJobName: "csv-data-processor-glue-job"
+
+Resources:
+
+  # S3 Bucket
+  PipelineInputDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !FindInMap [EnvConfig, dev, S3BucketName]
+      NotificationConfiguration: # event on object creation in the raw_data/
+        LambdaConfigurations: 
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt GlueJobRunnerLambda.Arn
+            Filter: 
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: "raw_data/"
+  
+  # s3event glue job lamba runner execution role
+  GlueJobRunnerLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies: 
+        - PolicyName: CustomPolicyToAcessS3DDBGLUE
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub 
+                    - "arn:aws:s3:::${BucketName}/*"
+                    - BucketName: !FindInMap [EnvConfig, dev, S3BucketName]
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !Sub
+                    - "arn:aws:dynamodb:${Region}:637607366496:table/${TableName}"
+                    - Region: !FindInMap [EnvConfig, dev, DefaultRegion]
+                      TableName: !FindInMap [EnvConfig, dev, GlueJobConfigurationTableName]
+              - Effect: Allow
+                Action:
+                  - glue:StartJobRun
+                Resource: !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/*"
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # on s3 event glue runner
+  GlueJobRunnerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+        S3Bucket: !FindInMap [EnvConfig, dev, PartialDataBucketName]
+        S3Key: s3_event_processor.zip
+      Handler: s3_event_processor.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt GlueJobRunnerLambdaExecutionRole.Arn
+
+  # permission to the s3 to invoke the glue job runner labmda function
+  S3DataBucketInvokeGlueJobRunnerLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GlueJobRunnerLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn : !Sub 
+        - "arn:aws:s3:::${BucketName}"
+        - BucketName: !FindInMap [EnvConfig, dev, S3BucketName]
+
+  # role for the glue job to run glue job 
+  TransformingDataGlueJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  # glue job for transforming data
+  TransformingDataGlueJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !FindInMap [EnvConfig, dev, GlueJobName]
+      Role: !GetAtt TransformingDataGlueJobRole.Arn
+      Command:
+        Name: glueetl
+        # ScriptLocation: !Sub 
+        #   - "s3://${BucketName}/{JobName}.py"
+        #   - BucketName: !FindInMap [EnvConfig, dev, PartialDataBucketName]
+        #     JobName: !FindInMap [EnvConfig, dev, GlueJobName]
+        ScriptLocation: "s3://project-partials-1745563858254/csv-data-processor-glue-job.py"
+        PythonVersion: '3'
+      MaxRetries: 0
+      Timeout: 10
+      NumberOfWorkers: 2
+      WorkerType: Standard
+      GlueVersion: "3.0"

@@ -1,0 +1,51 @@
+What configuration you are keeping
+what you are doing in the glue job
+
+import json
+import boto3
+
+glue_client = boto3.client('glue')
+
+def lambda_handler(event, context):
+
+
+
+    try:
+        # Extract the SQS message body
+        sqs_record = event['Records'][0]
+        message_body = json.loads(sqs_record['body'])
+
+        # Extract S3 details from the nested S3 event inside the message body
+        s3_event = message_body['Records'][0]
+        bucket_name = s3_event['s3']['bucket']['name']
+        object_key = s3_event['s3']['object']['key']
+
+        # Optional: Decode if object_key contains URL-encoded characters
+        import urllib.parse
+        object_key = urllib.parse.unquote_plus(object_key)
+
+        # Compose full input file path
+        s3_input_path = f"s3://{bucket_name}"
+        s3_file_name = object_key  # This is the relative path to the file in the bucket
+
+        # Output path - modify as per your desired S3 location
+        output_path = 's3://my-bucket-to-send-event-in-sqs/processed_data/'
+
+        print(s3_input_path, s3_file_name)
+
+        # Start the Glue job and pass arguments
+        response = glue_client.start_job_run(
+            JobName='MyGlueJobToProcesseS3Data',
+            Arguments={
+                '--input_path': s3_input_path,
+                '--file_name': s3_file_name,
+                '--output_path': output_path
+            }
+        )
+    except Exception as e:
+        print(f"Error processing message: {str(e)}")
+
+    return {
+        'statusCode': 200,
+        'body': f"Started Glue job with run ID: {response['JobRunId']}"
+    }
