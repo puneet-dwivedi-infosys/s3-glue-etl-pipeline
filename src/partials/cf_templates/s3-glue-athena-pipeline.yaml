@@ -13,6 +13,8 @@ Mappings:
       DefaultRegion: "ap-south-1"
       GlueJobConfigurationTableName: "glue-job-configurations"
       GlueJobName: "csv-data-processor-glue-job"
+      ProcessedDataGlueCatlogDatabaseName: "processed_data_db"
+      ProcessedDataGlueCrawlerName: "processed-data-crawler"
 
 Resources:
 
@@ -125,3 +127,208 @@ Resources:
       NumberOfWorkers: 2
       WorkerType: Standard
       GlueVersion: "3.0"
+
+  # glue crawler runner lambda execution role
+  GlueCrawlerRunnerLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CustomPolicyToAcessRunningGlueJob
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: # todo for now random
+              - Effect: Allow # glue crawler start 
+                Action:
+                  - glue:StartCrawler
+                Resource: !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/*"
+              - Effect: Allow # athena query execution
+                Action:
+                  - athena:StartQueryExecution
+                  - athena:GetQueryExecution
+                  - athena:GetQueryResults
+                Resource: "*"
+              - Effect: Allow # get and put s3 object
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub "arn:aws:s3:::aws-athena-query-results-${AWS::AccountId}-${AWS::Region}/*"
+
+  # lambda for running crawler
+  GlueCrawlerRunnerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+        S3Bucket: !FindInMap [EnvConfig, dev, PartialDataBucketName]
+        S3Key: glue_event_processor.zip
+      Handler: glue_event_processor.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt GlueCrawlerRunnerLambdaExecutionRole.Arn
+  
+  # invoking permission to lambda
+  GlueCrawlerRunnerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GlueCrawlerRunnerLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt GlueJobEventRule.Arn
+
+  # glue job event bridge
+  GlueJobEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: "glue-job-event-rule"
+      EventPattern:
+        source:           
+          - "aws.glue"
+        detail-type:      
+          - "Glue Job State Change"
+        detail:
+          jobName:
+            - !FindInMap [EnvConfig, dev, GlueJobName]
+          state:
+            - "SUCCEEDED"
+            - "FAILED"
+      Targets:
+        - Arn: !GetAtt GlueCrawlerRunnerLambda.Arn 
+          Id: "glue-job-completion-target"
+  
+  # glue catlog database
+  GlueCatlogDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !FindInMap [EnvConfig, dev, ProcessedDataGlueCatlogDatabaseName]  
+        Description: Glue database to hold crawler tables
+
+  # glue crawler role      
+  ProcessedDataGlueCrawlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+  # glue crawler
+  ProcessedDataGlueCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !FindInMap [EnvConfig, dev, ProcessedDataGlueCrawlerName] 
+      Role: !GetAtt ProcessedDataGlueCrawlerRole.Arn
+      DatabaseName: !FindInMap [EnvConfig, dev, ProcessedDataGlueCatlogDatabaseName]  
+      Targets:
+        S3Targets:
+          - Path: !Sub 
+              - "s3://${BucketName}/processed_data"
+              - BucketName: !FindInMap [EnvConfig, dev, S3BucketName]
+      TablePrefix: table_
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: LOG
+      RecrawlPolicy:
+        RecrawlBehavior: CRAWL_EVERYTHING
+      Configuration: >-
+        {
+          "Version": 1.0,
+          "Grouping": {
+            "TableGroupingPolicy": "CombineCompatibleSchemas"
+          }
+        }
+
+  # athena query runner lambda exection role
+  AthenaQueryRunnerLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CustomPolicyToAcessRunningGlueJob
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: # todo for now random
+              - Effect: Allow # athena query execution
+                Action:
+                  - athena:StartQueryExecution
+                  - athena:GetQueryExecution
+                  - athena:GetQueryResults
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                Resource:
+                  - arn:aws:s3:::*
+              - Effect: Allow # get and put s3 object
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:  "arn:aws:s3:::etl-pipeline-input-data-bucket/athena-query-result/*"
+              # Glue permissions
+              - Effect: Allow
+                Action: glue:*
+                Resource:
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/*
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/*/*
+
+  # athen query runner lamba
+  AthenaQueryRunnerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+        S3Bucket: !FindInMap [EnvConfig, dev, PartialDataBucketName]
+        S3Key: athena_query_runner.zip
+      Handler: athena_query_runner.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt AthenaQueryRunnerLambdaExecutionRole.Arn
+
+  # event brideg for the 
+  CrawlerCompletionEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: 'crawler-processed-data-event-rule'
+      EventPattern:
+        source:
+          - aws.glue
+        detail-type:
+          - Glue Crawler State Change
+        detail:
+          state:
+            - Succeeded
+          crawlerName:
+            - !FindInMap [EnvConfig, dev, ProcessedDataGlueCrawlerName]
+      Targets:
+        - Arn: !GetAtt AthenaQueryRunnerLambda.Arn
+          Id: AthenaLambdaTarget
+
+  # lambda invocation permission to the crawler event rule
+  AllowEventInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AthenaQueryRunnerLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CrawlerCompletionEventRule.Arn

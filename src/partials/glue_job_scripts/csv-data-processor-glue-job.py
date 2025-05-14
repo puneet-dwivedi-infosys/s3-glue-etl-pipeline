@@ -6,9 +6,12 @@ from pyspark.context import SparkContext
 
 
 args = getResolvedOptions(sys.argv, ['JOB_NAME', 'bucket_name', 'object_key'])
+file_name = args['object_key'].split("/")[-1]
 
 input_path = f"s3://{args['bucket_name']}/{args['object_key']}"
-output_path = f"s3://{args['bucket_name']}/processed_data/{args['object_key']}"
+#output_path = f"s3://{args['bucket_name']}/processed_data/{args['object_key']}"
+output_path = f"s3://{args['bucket_name']}/processed_data/{file_name}"
+
 
 
 sc = SparkContext()

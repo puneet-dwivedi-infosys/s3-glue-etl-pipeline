@@ -2,8 +2,7 @@
 
 
 S3 (File Uploaded)
-   │
-   └──> SQS Queue
+
          │
          └──> Lambda (Check status, config, run Glue)
                      │

@@ -6,7 +6,9 @@ from utils.constants import (
     EXTERNAL_S3_DATA_BUCKET, 
     S3_GLUE_ATHENA_PIPELINE_CF_TEMPLATE_FILE_NAME, 
     S3_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME,
-    CSV_DATA_PROCESSOR_GLUE_JOB_SCRIPT_FILE_NAME
+    CSV_DATA_PROCESSOR_GLUE_JOB_SCRIPT_FILE_NAME,
+    GLUE_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME,
+    ATHENA_QUERY_RUNNER_LAMBDA_HANDLER_FILE_NAME
 )
 from utils.utils import seed_glue_job_configuration_in_dynamodb
 
@@ -37,11 +39,20 @@ def seed():
     csv_data_processor_glue_job_file_path = os.path.join(base_dir, "src", "partials", "glue_job_scripts", CSV_DATA_PROCESSOR_GLUE_JOB_SCRIPT_FILE_NAME)
     s3_mgr.upload_file(csv_data_processor_glue_job_file_path, EXTERNAL_S3_DATA_BUCKET, CSV_DATA_PROCESSOR_GLUE_JOB_SCRIPT_FILE_NAME)
 
+    # uploading glue_event processor lambda handler function
+    glue_event_processor_lambda_function_file_path = os.path.join(base_dir, "src", "partials", "lambda_scripts",GLUE_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME)
+    s3_mgr.upload_file(glue_event_processor_lambda_function_file_path, EXTERNAL_S3_DATA_BUCKET, GLUE_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME)
+
+    # uploading athena query query lambda hanlder
+    athena_query_runner_lambda_function_file_path = os.path.join(base_dir, "src", "partials", "lambda_scripts",ATHENA_QUERY_RUNNER_LAMBDA_HANDLER_FILE_NAME)
+    s3_mgr.upload_file(athena_query_runner_lambda_function_file_path, EXTERNAL_S3_DATA_BUCKET, ATHENA_QUERY_RUNNER_LAMBDA_HANDLER_FILE_NAME)
 
     # allow public read
     s3_mgr.add_public_read_object_policy(EXTERNAL_S3_DATA_BUCKET, S3_GLUE_ATHENA_PIPELINE_CF_TEMPLATE_FILE_NAME)
     s3_mgr.add_public_read_object_policy(EXTERNAL_S3_DATA_BUCKET, S3_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME)
     s3_mgr.add_public_read_object_policy(EXTERNAL_S3_DATA_BUCKET, CSV_DATA_PROCESSOR_GLUE_JOB_SCRIPT_FILE_NAME)
+    s3_mgr.add_public_read_object_policy(EXTERNAL_S3_DATA_BUCKET, GLUE_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME)
+    s3_mgr.add_public_read_object_policy(EXTERNAL_S3_DATA_BUCKET, ATHENA_QUERY_RUNNER_LAMBDA_HANDLER_FILE_NAME)
 
 
     # writing dynamodb configuration

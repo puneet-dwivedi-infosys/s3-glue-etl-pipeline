@@ -49,3 +49,30 @@ def lambda_handler(event, context):
         'statusCode': 200,
         'body': f"Started Glue job with run ID: {response['JobRunId']}"
     }
+
+
+import boto3
+
+def trigger_athena_query():
+    athena = boto3.client('athena')
+    query = """
+        CREATE OR REPLACE VIEW processed_view AS 
+        SELECT * FROM processed_data_table
+    """
+    response = athena.start_query_execution(
+        QueryString=query,
+        ResultConfiguration={
+            'OutputLocation': 's3://your-query-results-bucket/'
+        }
+    )
+    print(f"Athena query started: {response}")
+
+
+
+import boto3
+
+def trigger_crawler():
+    glue = boto3.client('glue')
+    # Trigger the Glue Crawler for the processed data
+    response = glue.start_crawler(Name='ProcessedDataCrawler')
+    print(f"Crawler started: {response}")

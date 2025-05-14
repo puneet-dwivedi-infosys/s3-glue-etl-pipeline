@@ -6,10 +6,6 @@ from boto3.dynamodb.conditions import Attr
 GLUE_JOB_CONFIGURATION_DYNAMO_DB_TABLE_NAME= "glue-job-configurations"
 AWS_DEFAULT_REGION = "ap-south-1"
 
-# getting boto dynamodb resource
-dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table(GLUE_JOB_CONFIGURATION_DYNAMO_DB_TABLE_NAME)
-
 
 # function to get the job configurations from the 
 def get_job_name_by_format(object_format=None):
