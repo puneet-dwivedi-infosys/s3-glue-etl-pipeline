@@ -15,6 +15,8 @@ Mappings:
       GlueJobName: "csv-data-processor-glue-job"
       ProcessedDataGlueCatlogDatabaseName: "processed_data_db"
       ProcessedDataGlueCrawlerName: "processed-data-crawler"
+      TestUserEmail: "puneet.dwivedi@infosys.com"
+      GlueJobFailureAlertSNSTopicName: "glue-job-failure-sns-alert"
 
 Resources:
 
@@ -161,7 +163,10 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                 Resource: !Sub "arn:aws:s3:::aws-athena-query-results-${AWS::AccountId}-${AWS::Region}/*"
-
+              - Effect: Allow # to publish alert to sns 
+                Action:
+                  - sns:Publish
+                Resource: !Ref GlueJobFailureAlertSNSTopic
   # lambda for running crawler
   GlueCrawlerRunnerLambda:
     Type: AWS::Lambda::Function
@@ -332,3 +337,19 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt CrawlerCompletionEventRule.Arn
+
+  # alert infrastructure for the glue job failure
+
+  # sns topic
+  GlueJobFailureAlertSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !FindInMap [EnvConfig, dev, GlueJobFailureAlertSNSTopicName]
+  
+  # sns subscription
+  GlueJobFailureAlertSNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn:  !Ref GlueJobFailureAlertSNSTopic
+      Protocol: email
+      Endpoint: !FindInMap [EnvConfig, dev, TestUserEmail]
