@@ -8,6 +8,7 @@ AWS_DEFAULT_REGION = "ap-south-1"
 AWS_ACCOUNT_ID = "637607366496"
 GLUE_JOB_FAILURE_ALERT_SNS_TOPIC_NAME = "glue-job-failure-sns-alert"
 
+# crawler start script
 def start_crawler():
 	glue_client = boto3.client('glue', region_name=AWS_DEFAULT_REGION)
 	try:
@@ -15,8 +16,6 @@ def start_crawler():
 		print("Crawler run successfully")
 	except Exception as e:
 		print(f"Error starting the crawler {e}")
-
-
 
 # alert the glue job failure
 def alert_glue_job_failure():

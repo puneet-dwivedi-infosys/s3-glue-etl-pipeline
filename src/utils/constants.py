@@ -24,6 +24,8 @@ S3_GLUE_ATHENA_PIPELINE_CF_STACK_TEMPLATE_URL = f"https://{EXTERNAL_S3_DATA_BUCK
 
 CSV_DATA_PROCESSOR_GLUE_JOB_JOB_NAME = "csv-data-processor-glue-job"
 
+CSV_DATA_PROCESSOR_GLUE_JOB_FOR_BIG_FILE_JOB_NAME = "csv-data-processor-for-big-file-glue-job"
+
 CSV_DATA_PROCESSOR_GLUE_JOB_SCRIPT_FILE_NAME = f"{CSV_DATA_PROCESSOR_GLUE_JOB_JOB_NAME}.py"
 
 GLUE_JOB_CONFIGURATION_DYNAMO_DB_TABLE_NAME= "glue-job-configurations"
@@ -33,3 +35,18 @@ GLUE_EVENT_PROCESSOR_LAMBDA_HANDLER_FILE_NAME = "glue_event_processor.zip"
 PROCESSSED_DATA_GLUE_CRAWLER_NAME = "processed-data-crawler"
 
 ATHENA_QUERY_RUNNER_LAMBDA_HANDLER_FILE_NAME = "athena_query_runner.zip"
+
+GLUE_JOBS_CONFGIGURATION = [
+    {
+        'job_name': {'S': CSV_DATA_PROCESSOR_GLUE_JOB_JOB_NAME},
+        'format': {'S': 'csv'},
+        'lower_limit': {'N': '0'},
+        'upper_limit': {'N': '3072'}
+    },
+    {
+        'job_name': {'S': CSV_DATA_PROCESSOR_GLUE_JOB_FOR_BIG_FILE_JOB_NAME},
+        'format': {'S': 'csv'},
+        'lower_limit': {'N': '3073'},
+        'upper_limit': {'N': '10240'}
+    }
+]

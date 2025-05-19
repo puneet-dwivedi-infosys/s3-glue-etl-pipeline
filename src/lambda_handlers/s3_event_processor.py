@@ -8,7 +8,7 @@ AWS_DEFAULT_REGION = "ap-south-1"
 
 
 # function to get the job configurations from the 
-def get_job_name_by_format(object_format=None):
+def get_job_name_by_format(object_format=None, object_size = 0):
 
     # if not format return none
     if not object_format:
@@ -21,7 +21,11 @@ def get_job_name_by_format(object_format=None):
     # scanning logic
     try:
         response = table.scan(
-            FilterExpression=Attr('format').eq(object_format)
+            FilterExpression=(
+                Attr('format').eq(object_format) &
+                Attr('upper_limit').gte(object_size) &
+                Attr('lower_limit').lt(object_size)
+            )
         )
         items = response.get('Items', None)
         
@@ -59,15 +63,18 @@ def lambda_handler(event, context):
         record = event['Records'][0]
         # extracing the bucket and object key
         bucket_name = record['s3']['bucket']['name']
-        object_key =record['s3']['object']['key']
+        object_key = record['s3']['object']['key']
+        object_size = record['s3']['object'].get('size', 0)
 
         # obect format
         object_foramt = object_key.split('.')[-1]
 
-        print(bucket_name, object_key, object_foramt)
+        print(bucket_name, object_key, object_foramt, object_size)
 
         # get the glue job name
-        glue_job_name = get_job_name_by_format(object_foramt)
+        glue_job_name = get_job_name_by_format(object_foramt, object_size)
+
+        print(glue_job_name)
         if not glue_job_name:
             print(f"No job configured for format {object_foramt}")
             return {"status": "No job found"}

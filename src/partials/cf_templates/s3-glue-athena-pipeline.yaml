@@ -13,6 +13,7 @@ Mappings:
       DefaultRegion: "ap-south-1"
       GlueJobConfigurationTableName: "glue-job-configurations"
       GlueJobName: "csv-data-processor-glue-job"
+      GlueJobForBigFileName: "csv-data-processor-for-big-file-glue-job"
       ProcessedDataGlueCatlogDatabaseName: "processed_data_db"
       ProcessedDataGlueCrawlerName: "processed-data-crawler"
       TestUserEmail: "puneet.dwivedi@infosys.com"
@@ -119,10 +120,30 @@ Resources:
       Command:
         Name: glueetl
         # ScriptLocation: !Sub 
-        #   - "s3://${BucketName}/{JobName}.py"
+        #   - "s3://${BucketName}/${JobName}.py"
         #   - BucketName: !FindInMap [EnvConfig, dev, PartialDataBucketName]
         #     JobName: !FindInMap [EnvConfig, dev, GlueJobName]
         ScriptLocation: "s3://project-partials-1745563858254/csv-data-processor-glue-job.py"
+        PythonVersion: '3'
+      MaxRetries: 0
+      Timeout: 10
+      NumberOfWorkers: 2
+      WorkerType: Standard
+      GlueVersion: "3.0"
+  
+    # glue job for transforming data
+  TransformingBigFileDataGlueJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !FindInMap [EnvConfig, dev, GlueJobForBigFileName]
+      Role: !GetAtt TransformingDataGlueJobRole.Arn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub 
+          - "s3://${BucketName}/${JobName}.py"
+          - BucketName: !FindInMap [EnvConfig, dev, PartialDataBucketName]
+            JobName: !FindInMap [EnvConfig, dev, GlueJobName]
+        # ScriptLocation: "s3://project-partials-1745563858254/csv-data-processor-glue-job.py"
         PythonVersion: '3'
       MaxRetries: 0
       Timeout: 10
@@ -167,6 +188,7 @@ Resources:
                 Action:
                   - sns:Publish
                 Resource: !Ref GlueJobFailureAlertSNSTopic
+  
   # lambda for running crawler
   GlueCrawlerRunnerLambda:
     Type: AWS::Lambda::Function
@@ -200,6 +222,7 @@ Resources:
         detail:
           jobName:
             - !FindInMap [EnvConfig, dev, GlueJobName]
+            - !FindInMap [EnvConfig, dev, GlueJobForBigFileName]
           state:
             - "SUCCEEDED"
             - "FAILED"
@@ -284,6 +307,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:GetObject
                 Resource:
                   - arn:aws:s3:::*
               - Effect: Allow # get and put s3 object
@@ -298,6 +323,7 @@ Resources:
                   - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
                   - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/*
                   - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/*/*
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/*
 
   # athen query runner lamba
   AthenaQueryRunnerLambda:
